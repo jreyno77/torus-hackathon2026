@@ -17,7 +17,7 @@ test('nearby arrivals use brief source and destination pulses without icons, flo
   await fleet.expectSubmissionExpired('work-01');
 });
 
-test('on a phone the latest decision leaves site dots clickable and their empty margin stays map space', async ({ page }) => {
+test('on a phone activity cues leave site dots clickable and their empty margin stays map space', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const fleet = new FleetActivityFlow(page);
   await fleet.open();

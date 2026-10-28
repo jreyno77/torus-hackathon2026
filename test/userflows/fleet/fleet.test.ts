@@ -7,12 +7,29 @@ test('the normal application advances the live-input fleet with execution clearl
   const fleet = new FleetFlow(page);
   await fleet.open();
   await fleet.expectModeledExecution();
+  await expect(page.getByText('1 simulated hour ≈ 3.8s', { exact: true })).toBeVisible();
   expect(await fleet.modelHour()).toBe(0);
   await fleet.letPlaybackAdvance(7_000);
   expect(await fleet.modelHour()).toBeGreaterThan(0);
   const evidence = await fleet.evidence();
   expect(evidence.selected.run.simulated).toBe(true);
   expect(evidence.selected.run.ticks.length).toBeGreaterThan(0);
+});
+
+test('fleet event details stay hidden until a job is clicked', async ({ page }) => {
+  const fleet = new FleetFlow(page);
+  await fleet.open();
+  await fleet.pause();
+  await fleet.step();
+  const panel = page.getByRole('region', { name: 'Live input fleet', exact: true });
+  await panel.getByRole('button', { name: 'Close controls', exact: true }).click();
+  await expect(panel.locator('.fleet-stage > .fleet-decision')).toHaveCount(0);
+  await fleet.expectNoHoverPopup('Salt Lake City');
+  await panel.locator('summary').filter({ hasText: 'Inspect jobs' }).click();
+  await panel.getByRole('button', { name: 'Inspect work-01', exact: true }).click();
+  const job = panel.getByRole('region', { name: 'Job activity', exact: true });
+  await expect(job).toBeVisible();
+  await expect(job.locator('.fleet-decision')).toBeVisible();
 });
 
 test('zooming from Utah to the US and back preserves the running fleet and inspected location', async ({ page }) => {
@@ -27,7 +44,7 @@ test('zooming from Utah to the US and back preserves the running fleet and inspe
   await fleet.inspectLocation('Salt Lake City');
   expect((await fleet.currentLocation()).locationId).toBe('A');
   await fleet.showGeography('Explore Utah');
-  await fleet.expectUsefulHover('Salt Lake City');
+  await fleet.expectNoHoverPopup('Salt Lake City');
   await fleet.inspectLocation('Salt Lake City');
   const location = await fleet.currentLocation();
   const before = await fleet.evidence();

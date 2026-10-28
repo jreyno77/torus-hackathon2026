@@ -35,7 +35,7 @@ export function createFleetActivity(view: L.Map) {
 
     function pulse(endpoint: 'source' | 'destination', value: Endpoint) {
       const marker = L.circleMarker(value.point, {
-        interactive: false, radius: 11, color, weight: 1.5, fillColor: color, fillOpacity: .08,
+        interactive: false, radius: 7, color, weight: 1.5, fillColor: color, fillOpacity: .08,
         className: 'fleet-event-pulse',
       }).addTo(layer);
       const element = marker.getElement() as SVGPathElement;

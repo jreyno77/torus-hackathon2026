@@ -63,20 +63,6 @@ export function FleetMap({ sites, transfers, playing, completed = false, selecte
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(view);
-    let inspection: L.Tooltip | undefined;
-    const closeInspection = () => {
-      if (!inspection) return;
-      const previous = inspection; inspection = undefined;
-      view.closeTooltip(previous);
-      previous.getElement()?.remove();
-    };
-    const showInspection = (event: L.TooltipEvent) => {
-      if (!event.tooltip.options.className?.split(' ').includes('fleet-tooltip')) return;
-      if (inspection !== event.tooltip) closeInspection();
-      inspection = event.tooltip;
-    };
-    view.on('tooltipopen', showInspection);
-    view.on('movestart zoomstart', closeInspection);
     let initiallyFitted = false;
     let disposed = false;
     const resize = new ResizeObserver(() => {
@@ -90,7 +76,7 @@ export function FleetMap({ sites, transfers, playing, completed = false, selecte
       }
     });
     resize.observe(element);
-    return () => { disposed = true; resize.disconnect(); view.off('zoomend', updateLabelDetail); view.off('tooltipopen', showInspection); view.off('movestart zoomstart', closeInspection); closeInspection(); activity.current?.clear(); view.remove(); map.current = null; activity.current = null; };
+    return () => { disposed = true; resize.disconnect(); view.off('zoomend', updateLabelDetail); activity.current?.clear(); view.remove(); map.current = null; activity.current = null; };
   }, []);
   useEffect(() => {
     const layer = L.layerGroup().addTo(map.current!);
@@ -108,25 +94,8 @@ export function FleetMap({ sites, transfers, playing, completed = false, selecte
       element.innerHTML = '<span class="fleet-node-halo"></span><span class="fleet-node-body"></span><span class="fleet-node-name"></span>';
       element.querySelector('.fleet-node-name')!.textContent = site.name;
       element.addEventListener('click', event => { event.stopPropagation(); callbacks.current.onInspect(site.id); });
-      const marker = L.marker([site.latitude, site.longitude], { keyboard: false,
+      L.marker([site.latitude, site.longitude], { keyboard: false,
         icon: L.divIcon({ html: element, className: 'fleet-marker', iconSize: [50, 50], iconAnchor: [25, 25] }) }).addTo(layer);
-      const tooltip = document.createElement('div');
-      const name = document.createElement('strong'); name.textContent = site.name; tooltip.append(name);
-      const purpose = document.createElement('div'); purpose.textContent = 'Modeled compute site · solar, grid and battery'; tooltip.append(purpose);
-      const line = document.createElement('div'); line.textContent = completed ? 'Model complete · inspect results' : site.capacityState === 'unknown' ? 'GPU capacity unknown · missing model inputs'
-        : `Up to ${site.availableGpus} / ${site.capacity} modeled GPUs available · ${site.scheduledGpus} scheduled`;
-      tooltip.append(line);
-      if (!completed && site.remainingEnergyKWh !== null) {
-        const budget = document.createElement('div');
-        budget.textContent = `${site.remainingEnergyKWh.toFixed(2)} kWh modeled budget left · runtime may be less than an hour`;
-        tooltip.append(budget);
-      }
-      const power = document.createElement('small'); power.textContent = completed ? 'Final modeled storage: ' + site.storedKWh.toFixed(2) + ' kWh' : site.capacityState === 'unknown' ? 'Capacity needs current model inputs'
-        : `${site.solarKW.toFixed(2)} kW modeled solar · ${site.storedKWh.toFixed(2)} kWh stored`;
-      tooltip.append(power);
-      marker.bindTooltip(tooltip, { direction: 'top', offset: [0, -22], className: 'fleet-tooltip', interactive: false });
-      element.addEventListener('focus', () => marker.openTooltip());
-      element.addEventListener('blur', () => marker.closeTooltip());
     }
     return () => { layer.remove(); };
   }, [sites, selected, completed]);
@@ -150,7 +119,6 @@ export function FleetMap({ sites, transfers, playing, completed = false, selecte
         path?.setAttribute('role', 'button');
         path?.setAttribute('tabindex', '0');
         path?.setAttribute('aria-label', `Inspect transfer ${transfer.jobId} from ${from.name} to ${to.name}`);
-        line.bindTooltip(`${transfer.jobId} · ${from.name} → ${to.name} · Site move · modeled transfer`, { className: 'fleet-tooltip', interactive: false });
         line.on('click', () => callbacks.current.onJob(transfer.jobId));
         path?.addEventListener('keydown', event => { if ((event as KeyboardEvent).key === 'Enter') callbacks.current.onJob(transfer.jobId); });
       }
@@ -187,17 +155,8 @@ export function FleetMap({ sites, transfers, playing, completed = false, selecte
       element.setAttribute('aria-label', `Inspect data center ${source.name}`);
       element.innerHTML = '<span class="fleet-origin-body" aria-hidden="true"></span>';
       element.addEventListener('click', () => callbacks.current.onOrigin?.(source.id));
-      const marker = L.marker(point, { keyboard: false,
+      L.marker(point, { keyboard: false,
         icon: L.divIcon({ html: element, className: 'fleet-marker', iconSize: [30, 30], iconAnchor: [15, 15] }) }).addTo(layer);
-      const tooltip = document.createElement('div');
-      const title = document.createElement('strong'); title.textContent = source.name;
-      const purpose = document.createElement('div'); purpose.textContent = 'Synthetic jobs · public location reference';
-      const count = document.createElement('small'); count.textContent = admissions.filter(job => originForJob(job.jobId).id === source.id).length + ' simulated submissions · no operator workload feed';
-      const citation = document.createElement('small'); citation.textContent = 'Location source: ' + new URL(source.sourceUrl).hostname; citation.title = source.sourceUrl;
-      tooltip.append(title, purpose, count, citation);
-      marker.bindTooltip(tooltip, { direction: 'top', className: 'fleet-tooltip', interactive: false });
-      element.addEventListener('focus', () => marker.openTooltip());
-      element.addEventListener('blur', () => marker.closeTooltip());
     }
     for (const [index, admission] of admissions.entries()) {
       const source = originForJob(admission.jobId), destination = sites.find(site => site.id === admission.homeLocation);
@@ -211,10 +170,14 @@ export function FleetMap({ sites, transfers, playing, completed = false, selecte
       const identity = `admission:${admission.jobId}`;
       if (admission.jobId === selectedJob || (routeHistory && index >= admissions.length - 6)) {
         const line = L.polyline(points, { color: '#2563eb', weight: 1.5, opacity: .3, dashArray: '3 6', className: 'fleet-admission' }).addTo(layer);
-        line.getElement()?.setAttribute('data-job-id', admission.jobId);
-        line.getElement()?.setAttribute('data-event-id', identity);
-        line.bindTooltip(`${admission.jobId} · New job · simulated submission from ${source.name} to assigned home queue ${destination.name}`, { className: 'fleet-tooltip', interactive: false });
+        const path = line.getElement();
+        path?.setAttribute('data-job-id', admission.jobId);
+        path?.setAttribute('data-event-id', identity);
+        path?.setAttribute('role', 'button');
+        path?.setAttribute('tabindex', '0');
+        path?.setAttribute('aria-label', `Inspect submission ${admission.jobId} from ${source.name} to ${destination.name}`);
         line.on('click', () => callbacks.current.onJob(admission.jobId));
+        path?.addEventListener('keydown', event => { if ((event as KeyboardEvent).key === 'Enter') callbacks.current.onJob(admission.jobId); });
       }
       if (!seen.current.has(identity)) {
         seen.current.add(identity);

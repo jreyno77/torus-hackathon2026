@@ -114,12 +114,9 @@ export class FleetFlow {
     await expect(this.activity).toBeVisible();
   }
 
-  async expectUsefulHover(name: string): Promise<void> {
+  async expectNoHoverPopup(name: string): Promise<void> {
     await this.panel.getByRole('button', { name: 'Inspect ' + name, exact: true }).hover();
-    const tooltip = this.panel.locator('.fleet-tooltip');
-    await expect(tooltip).toContainText(name);
-    await expect(tooltip).toContainText(/modeled GPUs/i);
-    await expect(tooltip).toContainText(/kW.*solar|solar.*kW/i);
+    await expect(this.panel.locator('.fleet-tooltip')).toHaveCount(0);
   }
 
   async currentLocation(): Promise<LocationActivity> {

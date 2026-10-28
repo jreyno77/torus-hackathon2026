@@ -21,6 +21,9 @@ import './LiveFleet.css';
 
 const number = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 2 });
 const time = (value: string) => value.slice(11, 16) + ' UTC';
+const fleetTickMs = 2000;
+const fleetRoutedDwellMs = 1800;
+const fleetSecondsPerHour = (fleetTickMs + fleetRoutedDwellMs) / 1000;
 const unconnected: FleetSiteVisual[] = modeledSites.map(site => ({ ...site,
   ...fleetCapacity({ planPublished: false, kWPerGpu: .4, allocations: [] }),
   capacity: 8, solarKW: 0, storedKWh: 0, storageCapacityKWh: 0, activeJobs: 0, queuedJobs: 0 }));
@@ -143,7 +146,7 @@ function FleetSession({ capture, restored, freezeAnchor, latestSources, onRestor
   sourcePanelOpen: boolean; capture: FleetCapture; restored?: ReturnType<typeof createPairedReplaySession>; freezeAnchor?: SavedFleetMoment;
   latestSources: () => FleetSourceBundle; onRestore: (saved: SavedFleetMoment) => Promise<void>;
 }) {
-  const playback = useReplayPlayback(capture.scenario, { session: restored, autoPlay: !restored, tickMs: 4000, routedDwellMs: 1800 });
+  const playback = useReplayPlayback(capture.scenario, { session: restored, autoPlay: !restored, tickMs: fleetTickMs, routedDwellMs: fleetRoutedDwellMs });
   const { progress, actions } = playback;
   const place = (id: string) => progress.scenario.sites.find(site => site.configuration.locationId === id)?.name ?? id;
   const [selected, setSelected] = useState<string>();
@@ -208,7 +211,7 @@ function FleetSession({ capture, restored, freezeAnchor, latestSources, onRestor
   useEffect(() => {
     if (sourcePanelOpen) { closeInspection(); setMonkey(false); }
   }, [sourcePanelOpen]);
-  const remainingSeconds = Math.ceil((progress.totalHours - progress.hour) * 5.8 / playback.speed);
+  const remainingSeconds = Math.ceil((progress.totalHours - progress.hour) * fleetSecondsPerHour / playback.speed);
   const timeToResult = Math.floor(remainingSeconds / 60) + 'm ' + remainingSeconds % 60 + 's';
   async function freezeMoment() {
     setSaving(true);
@@ -251,12 +254,11 @@ function FleetSession({ capture, restored, freezeAnchor, latestSources, onRestor
     <div className="fleet-livebar"><div className="fleet-clock" data-playing={playback.playing}><em className="fleet-clock-label">Simulation clock</em><span className={playback.playing ? 'clock-pulse' : ''} />
       {(failure || progress.done || !playback.playing) && <strong>{failure ? 'Stopped' : progress.done ? 'Complete' : 'Paused'}</strong>}
       <output aria-label="Fleet model hour" data-hour={progress.hour}>{progress.hour} / {progress.totalHours} h</output>
-      <small className="fleet-clock-rate" title={time(currentAt)}>1 simulated hour ≈ {number(5.8 / playback.speed)}s</small>
+      <small className="fleet-clock-rate" title={time(currentAt)}>1 simulated hour ≈ {number(fleetSecondsPerHour / playback.speed)}s</small>
       {!progress.done && !failure && <small className="fleet-finish">{playback.playing ? 'Final result in ~' : 'Playback remaining ~'}{timeToResult}</small>}</div>
       <div className="fleet-play-actions">{!progress.done && <button className="fleet-pause" aria-label={playback.playing ? 'Pause fleet simulation' : 'Resume fleet simulation'} disabled={saving || preparingDisruption} onClick={() => { if (playback.playing) void actions.pause(); else actions.play(); }}>{playback.playing ? 'Ⅱ Pause' : '▷ Resume'}</button>}<button className="fleet-monkey" aria-label="Chaos monkey" aria-expanded={monkey} onClick={() => void openDisruption()}>🐒 <span>Disrupt</span></button></div></div>
     <FleetSummary progress={progress} />
     <div className="fleet-stage">
-      {!sourcePanelOpen && !monkey && !active && !origin && !job && <FleetDecision progress={progress} onInspect={inspectJob} />}
       <FleetMap selectedJob={jobId} completed={progress.done && !failure} activityEpoch={activityEpoch} sites={sites} transfers={progress.selected.run.transfers} playing={playback.playing}
         admissions={admissions} onOrigin={inspectOrigin} selected={selected} onInspect={inspect} onJob={inspectJob} />
       {!monkey && (active || job || origin) && <aside className="fleet-inspector">
